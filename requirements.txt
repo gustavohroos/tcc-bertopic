@@ -1,0 +1,7 @@
+sentence-transformers
+scikit-learn
+bertopic
+pandas[pyarrow]
+numpy
+gdown
+nltk
