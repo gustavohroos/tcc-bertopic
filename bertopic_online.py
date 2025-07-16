@@ -162,7 +162,11 @@ class SectionGenerator:
         else:
             print("\nNo sections were generated for the entire date range.")
         if self.metrics:
-            pd.DataFrame(self.metrics).to_csv("daily_topic_metrics_online.csv", index=False)
+            metrics_filename = f"metrics_{self.start_date:%Y%m%d}_to_{self.end_date:%Y%m%d}_bertopic_online.csv"
+            metrics_df = pd.DataFrame(self.metrics)
+            metrics_df.to_csv(metrics_filename, index=False)
+            print(f"Saved daily metrics to {metrics_filename}")
+
         return df_all
 
 if __name__ == "__main__":
