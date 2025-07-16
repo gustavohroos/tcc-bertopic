@@ -1,6 +1,7 @@
 import itertools
 import nltk
 import pandas as pd
+import numpy as np
 from hdbscan import HDBSCAN
 from datetime import datetime, timedelta
 from bertopic import BERTopic
@@ -11,6 +12,7 @@ from sklearn.decomposition import PCA
 from umap import UMAP
 from gensim.models.coherencemodel import CoherenceModel
 from gensim.corpora import Dictionary
+import traceback
 
 BERTOPIC_MODEL_BASE_PATH = "models/bertopic_v2"
 ARTICLES_PATH = "data/articles/articles_body/articles.parquet"
@@ -77,23 +79,36 @@ class SectionGenerator:
         self.sentence_model = self.topic_model_manager.sentence_model
         self.metrics: list[dict[str, float]] = []
 
+    def rescale(self, x: np.ndarray) -> np.ndarray:
+            # Rescale a 2D embedding array to prevent convergence issues during dimensionality reduction (e.g., UMAP).
+
+            x /= np.std(x[:, 0]) * 10000
+            return x
+
     def process_day(self, current_date: datetime, articles_for_day: pd.DataFrame) -> pd.DataFrame | None:
         day_str = current_date.strftime("%Y-%m-%d")
+        print(f"\n--- Processing articles for {day_str} ---")
+
         if articles_for_day.empty:
+            print(f"No articles found for {day_str}. Skipping.")
             return None
+
         if 'newsId' not in articles_for_day.columns or articles_for_day['newsId'].isnull().all():
             articles_for_day['newsId'] = [f"doc_{day_str}_{i}" for i in range(len(articles_for_day))]
+
         try:
             corpus = get_document_corpus(articles_for_day).tolist()
             embeddings = self.sentence_model.encode(corpus, show_progress_bar=False)
-            pca_embeddings = PCA(n_components=5).fit_transform(embeddings)
+            pca_embeddings = self.rescale(PCA(n_components=5).fit_transform(embeddings))
             topic_model = self.topic_model_manager.get_new_bertopic_model(pca_embeddings)
             topics, probs = topic_model.fit_transform(corpus, embeddings=pca_embeddings)
             topic_counts = pd.Series(topics).value_counts()
             num_unassigned = int(topic_counts.get(-1, 0))
             valid_topic_ids = [t for t in set(topics) if t != -1]
             num_topics = len(valid_topic_ids)
+
             if num_topics == 0:
+                print(f"No meaningful topics found for {day_str} after processing.")
                 self.metrics.append({
                     "day": day_str,
                     "num_topics": 0,
@@ -102,6 +117,7 @@ class SectionGenerator:
                     "td": 0.0
                 })
                 return None
+
             df_res = pd.DataFrame({
                 "timestamp": datetime.now(),
                 "processing_date": day_str,
@@ -113,10 +129,12 @@ class SectionGenerator:
                     for t in topics
                 ]
             })
+
             topic_word_lists = [
                 [w for w, _ in topic_model.get_topic(tid)]
                 for tid in valid_topic_ids
             ]
+
             tokenized_docs = [doc.split() for doc in corpus]
             gensim_dict = Dictionary(tokenized_docs)
             cm = CoherenceModel(
@@ -137,26 +155,34 @@ class SectionGenerator:
                 "npmi": npmi_score,
                 "td": td_score
             })
-        except Exception:
+        except Exception as e:
+            print(f"Error processing articles for {day_str}: {e}")
+            traceback.print_exc()
+            print("Skipping this day due to error.")
             return None
-        return df_res
+
+        return df_res if not df_res.empty else None
 
     def run(self):
         all_articles = load_articles()
         if 'publishDate' not in all_articles.columns:
             raise ValueError("Required column 'publishDate' not found")
         all_articles['date_col'] = pd.to_datetime(all_articles['publishDate'])
+
         df_all_sections = pd.DataFrame()
         current_date = self.start_date
+
         while current_date <= self.end_date:
             day_df = all_articles[all_articles['date_col'].dt.date == current_date.date()].copy()
             daily = self.process_day(current_date, day_df)
             if daily is not None and not daily.empty:
                 df_all_sections = pd.concat([df_all_sections, daily], ignore_index=True)
             current_date += timedelta(days=1)
+
         if not df_all_sections.empty:
-            fname = f"topics_{self.start_date:%Y%m%d}_to_{self.end_date:%Y%m%d}_bertopic_v2.parquet"
-            df_all_sections.to_parquet(fname, index=False)
+            topics_filename = f"topics_{self.start_date:%Y%m%d}_to_{self.end_date:%Y%m%d}_bertopic_v2.parquet"
+            df_all_sections.to_parquet(topics_filename, index=False)
+            print(f"Saved topics to {topics_filename}")
         if self.metrics:
             metrics_df = pd.DataFrame(self.metrics)
             metrics_df.to_csv(f"metrics_{self.start_date:%Y%m%d}_to_{self.end_date:%Y%m%d}_bertopic_v2.csv", index=False)
@@ -165,5 +191,7 @@ class SectionGenerator:
 if __name__ == "__main__":
     generator = SectionGenerator(start_date=START_DATE, end_date=END_DATE)
     final_df = generator.run()
-    if final_df is not None and not final_df.empty:
+    if not final_df.empty:
+        print("\n--- Example of Generated Sections ---")
         print(final_df.head())
+        print(f"\nTotal sections generated: {len(final_df)}")
