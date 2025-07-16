@@ -168,9 +168,10 @@ class SectionGenerator:
             print(f"Saved topics to {topics_filename}")
 
         if self.metrics:
+            metrics_filename = f"metrics_{self.start_date:%Y%m%d}_to_{self.end_date:%Y%m%d}_bertopic_v1.csv"
             metrics_df = pd.DataFrame(self.metrics)
-            metrics_df.to_csv(f"metrics_{self.start_date:%Y%m%d}_to_{self.end_date:%Y%m%d}_bertopic_v1.csv", index=False)
-            print("Saved daily metrics to daily_topic_metrics.csv")
+            metrics_df.to_csv(metrics_filename, index=False)
+            print(f"Saved daily metrics to {metrics_filename}")
 
         return df_all_sections
 
