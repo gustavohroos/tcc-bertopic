@@ -68,7 +68,7 @@ class TopicModelManager:
         umap_model = IncrementalPCA(n_components=5)
         cluster_model = MiniBatchKMeans(n_clusters=15, random_state=42, n_init='auto')
         ctfidf_model = ClassTfidfTransformer(reduce_frequent_words=True)
-        vectorizer_model = OnlineCountVectorizer(stop_words=self.stopwords, ngram_range=(1, 2))
+        vectorizer_model = OnlineCountVectorizer(stop_words=self.stopwords, ngram_range=(1, 1))
         return BERTopic(
             embedding_model=self.sentence_model,
             umap_model=umap_model,

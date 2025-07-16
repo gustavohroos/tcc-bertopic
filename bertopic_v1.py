@@ -54,7 +54,7 @@ class TopicModelManager:
             language='multilingual',
             min_topic_size=10,
             nr_topics='auto',
-            vectorizer_model=CountVectorizer(stop_words=self.stopwords, ngram_range=(1,2)),
+            vectorizer_model=CountVectorizer(stop_words=self.stopwords, ngram_range=(1,1)),
             hdbscan_model=hdbscan_model,
             verbose=True
         )

@@ -66,7 +66,7 @@ class TopicModelManager:
             embedding_model=self.sentence_model,
             umap_model=umap_model,
             hdbscan_model=hdbscan_model,
-            vectorizer_model=CountVectorizer(stop_words=self.stopwords, ngram_range=(1, 2)),
+            vectorizer_model=CountVectorizer(stop_words=self.stopwords, ngram_range=(1, 1)),
             ctfidf_model=ctfidf_model,
             verbose=True
         )
