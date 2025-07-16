@@ -9,6 +9,7 @@ from bertopic.vectorizers import ClassTfidfTransformer, OnlineCountVectorizer
 from sklearn.cluster import MiniBatchKMeans
 from sklearn.decomposition import IncrementalPCA
 from sentence_transformers import SentenceTransformer
+import traceback
 from gensim.models.coherencemodel import CoherenceModel
 from gensim.corpora import Dictionary
 
@@ -26,15 +27,19 @@ def load_continuous_bertopic_model() -> BERTopic:
     path = _get_continuous_model_path()
     if not os.path.exists(path):
         raise FileNotFoundError(f"Continuous model not found at {path}")
+    print(f"Loading continuous model from {path}...")
     model = BERTopic.load(path)
     if not isinstance(model, BERTopic):
         raise ValueError(f"Loaded object is not BERTopic: {type(model)}")
+    print("Continuous model loaded successfully.")
     return model
 
 def save_continuous_bertopic_model(model: BERTopic) -> None:
     path = _get_continuous_model_path()
     os.makedirs(os.path.dirname(path), exist_ok=True)
+    print(f"Saving continuous model to {path}...")
     model.save(path, serialization='pickle', save_ctfidf=True)
+    print("Continuous model saved successfully.")
 
 def load_articles() -> pd.DataFrame:
     articles = pd.read_parquet(ARTICLES_PATH)
@@ -79,6 +84,7 @@ class TopicModelManager:
         try:
             return load_continuous_bertopic_model()
         except Exception:
+            print("Could not load continuous model. Creating a new one.")
             return self._initialize_new_bertopic_model()
 
 class SectionGenerator:
@@ -91,20 +97,25 @@ class SectionGenerator:
 
     def process_day(self, current_date: datetime, articles: pd.DataFrame, model: BERTopic) -> pd.DataFrame | None:
         day = current_date.strftime("%Y-%m-%d")
+        print(f"\n--- Processing articles for {day} ---")
         if articles.empty:
+            print(f"No articles found for {day}. Skipping.")
             return None
         if 'newsId' not in articles.columns or articles['newsId'].isnull().all():
+            print("Warning: 'newsId' column not found or is empty. Generating default document keys.")
             articles['newsId'] = [f"doc_{day}_{i}" for i in range(len(articles))]
         try:
             docs = get_document_corpus(articles).tolist()
             embeddings = self.sentence_model.encode(docs, show_progress_bar=False).astype(np.float64)
             model.partial_fit(docs, embeddings=embeddings)
             topics, _ = model.transform(docs, embeddings=embeddings)
+            print(f"Model updated for {day} with {len(set(topics))} topics (including noise if present).")
             counts = pd.Series(topics).value_counts()
             unassigned = int(counts.get(-1, 0))
             valid = [t for t in set(topics) if t != -1]
             num_topics = len(valid)
             if num_topics == 0:
+                print(f"No meaningful topics found for {day} after processing.")
                 self.metrics.append({"day": day, "num_topics": 0, "num_unassigned": unassigned, "npmi": 0.0, "td": 0.0})
                 return None
             df = pd.DataFrame({
@@ -124,7 +135,10 @@ class SectionGenerator:
             all_w = list(itertools.chain.from_iterable(topic_words))
             td = len(set(all_w)) / (N * num_topics)
             self.metrics.append({"day": day, "num_topics": num_topics, "num_unassigned": unassigned, "npmi": npmi, "td": td})
-        except Exception:
+        except Exception as e:
+            print(f"Error processing articles for {day}: {e}")
+            traceback.print_exc()
+            print("Skipping this day due to error.")
             return None
         return df
 
@@ -142,14 +156,19 @@ class SectionGenerator:
             date += timedelta(days=1)
         if not df_all.empty:
             save_continuous_bertopic_model(model)
-            df_all.to_parquet(f"topics_{self.start_date:%Y%m%d}_to_{self.end_date:%Y%m%d}_bertopic_online.parquet", index=False)
+            topics_filename = f"topics_{self.start_date:%Y%m%d}_to_{self.end_date:%Y%m%d}_bertopic_online.parquet"
+            df_all.to_parquet(topics_filename, index=False)
+            print(f"\nAll generated sections saved to {topics_filename}")
+        else:
+            print("\nNo sections were generated for the entire date range.")
         if self.metrics:
-            metrics_df = pd.DataFrame(self.metrics)
-            metrics_df.to_csv(f"metrics_{self.start_date:%Y%m%d}_to_{self.end_date:%Y%m%d}_bertopic_online.csv", index=False)
+            pd.DataFrame(self.metrics).to_csv("daily_topic_metrics_online.csv", index=False)
         return df_all
 
 if __name__ == "__main__":
     gen = SectionGenerator(start_date=START_DATE, end_date=END_DATE)
     out = gen.run()
     if out is not None and not out.empty:
+        print("\n--- Example of Generated Sections ---")
         print(out.head())
+        print(f"\nTotal sections generated: {len(out)}")
