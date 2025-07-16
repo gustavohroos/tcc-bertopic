@@ -50,3 +50,10 @@ setup: requirements download-data
 clean:
 	@rm -rf $(DATA_DIR)
 	@echo "Cleaned up data directory."
+
+run:
+	@echo "Running the main script..."
+	@python bertopic_v1.py
+	@python bertopic_v2.py
+	@python bertopic_online.py
+	@echo "All scripts executed successfully."
