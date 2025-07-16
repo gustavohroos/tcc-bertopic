@@ -5,3 +5,4 @@ pandas[pyarrow]
 numpy
 gdown
 nltk
+gensim
