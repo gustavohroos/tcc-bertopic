@@ -56,4 +56,5 @@ run:
 	@python bertopic_v1.py
 	@python bertopic_v2.py
 	@python bertopic_online.py
+	@python metrics.py
 	@echo "All scripts executed successfully."
