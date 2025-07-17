@@ -1,22 +1,21 @@
 import os
-import itertools
 import nltk
 import numpy as np
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime
 from bertopic import BERTopic
 from bertopic.vectorizers import ClassTfidfTransformer, OnlineCountVectorizer
 from sklearn.cluster import MiniBatchKMeans
 from sklearn.decomposition import IncrementalPCA
 from sentence_transformers import SentenceTransformer
 import traceback
-from gensim.models.coherencemodel import CoherenceModel
-from gensim.corpora import Dictionary
+from tqdm import tqdm
+import re
 
 BERTOPIC_MODEL_BASE_PATH = "models/bertopic_albertina_online"
 ARTICLES_PATH = "data/articles/articles_body/articles.parquet"
-START_DATE = datetime(2023, 1, 7)
-END_DATE = datetime(2023, 4, 28)
+START_DATE = datetime(2023, 1, 1)
+END_DATE = datetime(2023, 5, 2)
 CONTINUOUS_MODEL_NAME = "bertopic_continuous_model.pkl"
 SENTENCE_MODEL = "PORTULAN/albertina-100m-portuguese-ptbr-encoder"
 
@@ -49,8 +48,8 @@ def load_articles() -> pd.DataFrame:
         articles = articles.drop(columns=["url"])
     return articles
 
-def get_document_corpus(df: pd.DataFrame) -> pd.Series:
-    return df["title"]
+def get_document_corpus(docs_df: pd.DataFrame) -> pd.Series:
+    return docs_df["title"].apply(lambda x: re.sub(r"[^\w\s]", "", str(x)))
 
 def get_stopwords() -> list[str]:
     try:
@@ -75,7 +74,7 @@ class TopicModelManager:
             hdbscan_model=cluster_model,
             vectorizer_model=vectorizer_model,
             ctfidf_model=ctfidf_model,
-            verbose=True,
+            # verbose=True,
             nr_topics='auto',
             min_topic_size=5
         )
@@ -93,11 +92,9 @@ class SectionGenerator:
         self.end_date = end_date
         self.sentence_model = SentenceTransformer(SENTENCE_MODEL)
         self.topic_model_manager = TopicModelManager(self.sentence_model)
-        self.metrics: list[dict[str, float]] = []
 
     def process_day(self, current_date: datetime, articles: pd.DataFrame, model: BERTopic) -> pd.DataFrame | None:
         day = current_date.strftime("%Y-%m-%d")
-        print(f"\n--- Processing articles for {day} ---")
         if articles.empty:
             print(f"No articles found for {day}. Skipping.")
             return None
@@ -109,15 +106,14 @@ class SectionGenerator:
             embeddings = self.sentence_model.encode(docs, show_progress_bar=False).astype(np.float64)
             model.partial_fit(docs, embeddings=embeddings)
             topics, _ = model.transform(docs, embeddings=embeddings)
-            print(f"Model updated for {day} with {len(set(topics))} topics (including noise if present).")
-            counts = pd.Series(topics).value_counts()
-            unassigned = int(counts.get(-1, 0))
+
             valid = [t for t in set(topics) if t != -1]
             num_topics = len(valid)
+
             if num_topics == 0:
                 print(f"No meaningful topics found for {day} after processing.")
-                self.metrics.append({"day": day, "num_topics": 0, "num_unassigned": unassigned, "npmi": 0.0, "td": 0.0})
                 return None
+
             df = pd.DataFrame({
                 "timestamp": datetime.now(),
                 "processing_date": day,
@@ -126,15 +122,7 @@ class SectionGenerator:
                 "topic": [str(t) for t in topics],
                 "topic_name_list": [[w for w, _ in model.get_topic(t)] if t != -1 else [] for t in topics]
             })
-            topic_words = [[w for w, _ in model.get_topic(tid)] for tid in valid]
-            tokens = [d.split() for d in docs]
-            gensim_dict = Dictionary(tokens)
-            cm = CoherenceModel(topics=topic_words, texts=tokens, dictionary=gensim_dict, coherence='c_npmi')
-            npmi = cm.get_coherence()
-            N = len(topic_words[0])
-            all_w = list(itertools.chain.from_iterable(topic_words))
-            td = len(set(all_w)) / (N * num_topics)
-            self.metrics.append({"day": day, "num_topics": num_topics, "num_unassigned": unassigned, "npmi": npmi, "td": td})
+
         except Exception as e:
             print(f"Error processing articles for {day}: {e}")
             traceback.print_exc()
@@ -143,29 +131,30 @@ class SectionGenerator:
         return df
 
     def run(self):
+        all_articles = load_articles()
+        if 'publishDate' not in all_articles.columns:
+            raise ValueError("Required column 'publishDate' not found")
+        all_articles['date_col'] = pd.to_datetime(all_articles['publishDate'])
+        topic_model = self.topic_model_manager.get_or_create_continuous_model()
+
         df_all = pd.DataFrame()
-        articles = load_articles()
-        articles['date_col'] = pd.to_datetime(articles['publishDate'])
-        model = self.topic_model_manager.get_or_create_continuous_model()
-        date = self.start_date
-        while date <= self.end_date:
-            daily = articles[articles['date_col'].dt.date == date.date()].copy()
-            res = self.process_day(date, daily, model)
-            if res is not None and not res.empty:
-                df_all = pd.concat([df_all, res], ignore_index=True)
-            date += timedelta(days=1)
+        current_date = self.start_date
+
+
+        date_range = pd.date_range(self.start_date, self.end_date, freq="D")
+        for current_date in tqdm(date_range, desc="Processing days"):
+            day_df = all_articles[all_articles['date_col'].dt.date == current_date.date()].copy()
+            daily = self.process_day(current_date, day_df, topic_model)
+            if daily is not None and not daily.empty:
+                df_all = pd.concat([df_all, daily], ignore_index=True)
+
         if not df_all.empty:
-            save_continuous_bertopic_model(model)
+            save_continuous_bertopic_model(topic_model)
             topics_filename = f"topics_{self.start_date:%Y%m%d}_to_{self.end_date:%Y%m%d}_bertopic_online.parquet"
             df_all.to_parquet(topics_filename, index=False)
             print(f"\nAll generated sections saved to {topics_filename}")
         else:
             print("\nNo sections were generated for the entire date range.")
-        if self.metrics:
-            metrics_filename = f"metrics_{self.start_date:%Y%m%d}_to_{self.end_date:%Y%m%d}_bertopic_online.csv"
-            metrics_df = pd.DataFrame(self.metrics)
-            metrics_df.to_csv(metrics_filename, index=False)
-            print(f"Saved daily metrics to {metrics_filename}")
 
         return df_all
 
