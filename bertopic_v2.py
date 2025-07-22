@@ -16,7 +16,7 @@ import re
 BERTOPIC_MODEL_BASE_PATH = "models/bertopic_v2"
 ARTICLES_PATH = "data/articles/articles_body/articles.parquet"
 START_DATE = datetime(2023, 1, 1)
-END_DATE = datetime(2023, 5, 2)
+END_DATE = datetime(2023, 4, 30)
 SENTENCE_MODEL = "PORTULAN/albertina-100m-portuguese-ptbr-encoder"
 
 def load_articles() -> pd.DataFrame:
@@ -83,14 +83,14 @@ class SectionGenerator:
             return x
 
     def process_day(self, current_date: datetime, articles_for_day: pd.DataFrame) -> pd.DataFrame | None:
-        day_str = current_date.strftime("%Y-%m-%d")
+        day = current_date.strftime("%Y-%m-%d")
 
         if articles_for_day.empty:
-            print(f"No articles found for {day_str}. Skipping.")
+            print(f"No articles found for {day}. Skipping.")
             return None
 
         if 'newsId' not in articles_for_day.columns or articles_for_day['newsId'].isnull().all():
-            articles_for_day['newsId'] = [f"doc_{day_str}_{i}" for i in range(len(articles_for_day))]
+            articles_for_day['newsId'] = [f"doc_{day}_{i}" for i in range(len(articles_for_day))]
 
         try:
             corpus = get_document_corpus(articles_for_day).tolist()
@@ -103,23 +103,23 @@ class SectionGenerator:
             num_topics = len(valid_topic_ids)
 
             if num_topics == 0:
-                print(f"No meaningful topics found for {day_str} after processing.")
+                print(f"No meaningful topics found for {day} after processing.")
                 return None
 
             df_res = pd.DataFrame({
-                "timestamp": datetime.now(),
-                "processing_date": day_str,
+                "timestamp": day,
+                "processing_date": datetime.now(),
                 "newsId": articles_for_day["newsId"].reset_index(drop=True),
                 "doc": corpus,
-                "topic": [str(t) for t in topics],
-                "topic_name_list": [
+                "section": [str(t) for t in topics],
+                "section_name_list": [
                     [word for word, _ in topic_model.get_topic(t)] if t != -1 else []
                     for t in topics
                 ]
             })
 
         except Exception as e:
-            print(f"Error processing articles for {day_str}: {e}")
+            print(f"Error processing articles for {day}: {e}")
             traceback.print_exc()
             print("Skipping this day due to error.")
             return None
@@ -141,9 +141,12 @@ class SectionGenerator:
             daily = self.process_day(current_date, day_df)
             if daily is not None and not daily.empty:
                 df_all_sections = pd.concat([df_all_sections, daily], ignore_index=True)
+                print(f"Processed {current_date.strftime('%Y-%m-%d')} with {len(daily)} documents and {len(daily['section'].unique())} topics.")
+            else:
+                print(f"No documents found for {current_date.strftime('%Y-%m-%d')}.")
 
         if not df_all_sections.empty:
-            topics_filename = f"topics_{self.start_date:%Y%m%d}_to_{self.end_date:%Y%m%d}_bertopic_v2.parquet"
+            topics_filename = f"results/v2/topics_{self.start_date:%Y%m%d}_to_{self.end_date:%Y%m%d}_bertopic_v2.parquet"
             df_all_sections.to_parquet(topics_filename, index=False)
             print(f"Saved topics to {topics_filename}")
 

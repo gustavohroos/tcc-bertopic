@@ -15,7 +15,7 @@ import re
 BERTOPIC_MODEL_BASE_PATH = "models/bertopic_albertina_online"
 ARTICLES_PATH = "data/articles/articles_body/articles.parquet"
 START_DATE = datetime(2023, 1, 1)
-END_DATE = datetime(2023, 5, 2)
+END_DATE = datetime(2023, 4, 30)
 CONTINUOUS_MODEL_NAME = "bertopic_continuous_model.pkl"
 SENTENCE_MODEL = "PORTULAN/albertina-100m-portuguese-ptbr-encoder"
 
@@ -115,12 +115,12 @@ class SectionGenerator:
                 return None
 
             df = pd.DataFrame({
-                "timestamp": datetime.now(),
-                "processing_date": day,
+                "timestamp": day,
+                "processing_date": datetime.now(),
                 "newsId": articles["newsId"].reset_index(drop=True),
                 "doc": docs,
-                "topic": [str(t) for t in topics],
-                "topic_name_list": [[w for w, _ in model.get_topic(t)] if t != -1 else [] for t in topics]
+                "section": [str(t) for t in topics],
+                "section_name_list": [[w for w, _ in model.get_topic(t)] if t != -1 else [] for t in topics]
             })
 
         except Exception as e:
@@ -140,17 +140,17 @@ class SectionGenerator:
         df_all = pd.DataFrame()
         current_date = self.start_date
 
-
         date_range = pd.date_range(self.start_date, self.end_date, freq="D")
         for current_date in tqdm(date_range, desc="Processing days"):
             day_df = all_articles[all_articles['date_col'].dt.date == current_date.date()].copy()
             daily = self.process_day(current_date, day_df, topic_model)
             if daily is not None and not daily.empty:
                 df_all = pd.concat([df_all, daily], ignore_index=True)
+                print(f"Processed {current_date.strftime('%Y-%m-%d')} with {len(daily)} documents and {len(daily['section'].unique())} topics.")
 
         if not df_all.empty:
             save_continuous_bertopic_model(topic_model)
-            topics_filename = f"topics_{self.start_date:%Y%m%d}_to_{self.end_date:%Y%m%d}_bertopic_online.parquet"
+            topics_filename = f"results/online/topics_{self.start_date:%Y%m%d}_to_{self.end_date:%Y%m%d}_bertopic_online.parquet"
             df_all.to_parquet(topics_filename, index=False)
             print(f"\nAll generated sections saved to {topics_filename}")
         else:
