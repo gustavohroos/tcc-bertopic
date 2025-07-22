@@ -150,8 +150,8 @@ class SectionGenerator:
 
         if not df_all.empty:
             save_continuous_bertopic_model(topic_model)
-            topics_filename = f"results/online/topics_{self.start_date:%Y%m%d}_to_{self.end_date:%Y%m%d}_bertopic_online.parquet"
-            df_all.to_parquet(topics_filename, index=False)
+            topics_filename = f"results/online/topics_{self.start_date:%Y%m%d}_to_{self.end_date:%Y%m%d}_bertopic_online.csv"
+            df_all.to_csv(topics_filename, index=False)
             print(f"\nAll generated sections saved to {topics_filename}")
         else:
             print("\nNo sections were generated for the entire date range.")

@@ -146,8 +146,8 @@ class SectionGenerator:
                 print(f"No documents found for {current_date.strftime('%Y-%m-%d')}.")
 
         if not df_all_sections.empty:
-            topics_filename = f"results/v2/topics_{self.start_date:%Y%m%d}_to_{self.end_date:%Y%m%d}_bertopic_v2.parquet"
-            df_all_sections.to_parquet(topics_filename, index=False)
+            topics_filename = f"results/v2/topics_{self.start_date:%Y%m%d}_to_{self.end_date:%Y%m%d}_bertopic_v2.csv"
+            df_all_sections.to_csv(topics_filename, index=False)
             print(f"Saved topics to {topics_filename}")
 
         return df_all_sections

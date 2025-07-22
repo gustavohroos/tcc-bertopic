@@ -102,12 +102,12 @@ def compute_run_metrics(timestamp, df_run):
 
 if __name__ == "__main__":
     filenames = [
-        "results/online/topics_20230101_to_20230430_bertopic_online.parquet",
-        "results/v1/topics_20230101_to_20230430_bertopic_v1.parquet",
-        "results/v2/topics_20230101_to_20230430_bertopic_v2.parquet",
-        "bertopic_v1_topics_globo.parquet",
-        "bertopic_v2_topics_globo.parquet",
-        "bertopic_online_topics_globo.parquet"
+        "results/online/topics_20230101_to_20230430_bertopic_online.csv",
+        "results/v1/topics_20230101_to_20230430_bertopic_v1.csv",
+        "results/v2/topics_20230101_to_20230430_bertopic_v2.csv",
+        "bertopic_v1_topics_globo.csv",
+        "bertopic_v2_topics_globo.csv",
+        "bertopic_online_topics_globo.csv"
     ]
 
     for filename in filenames:
@@ -121,7 +121,7 @@ if __name__ == "__main__":
             results.append(compute_run_metrics(timestamp, df_run))
 
         metrics_df = pd.DataFrame(results)
-        output_csv = filename.replace(".parquet", "_run_metrics.csv")
+        output_csv = filename.replace(".csv", "_run_metrics.csv")
         metrics_df.to_csv(output_csv, index=False)
         print(f"Saved metrics to {output_csv}")
         print(metrics_df)
