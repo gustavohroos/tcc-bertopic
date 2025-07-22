@@ -229,3 +229,6 @@ pyrightconfig.json
 
 data/
 models/
+bertopic_v2_topics_globo.csv
+bertopic_v1_topics_globo.csv
+bertopic_online_topics_globo.csv
