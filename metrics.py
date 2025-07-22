@@ -14,7 +14,9 @@ def clean_text(text):
     return [w for w in cleaned if w]
 
 def clean_topic_words(words):
-    if isinstance(words, (list, np.ndarray)):
+    if isinstance(words, str):
+        tokens = words.split()
+    elif isinstance(words, (list, np.ndarray)):
         tokens = list(words)
     else:
         return []
@@ -105,13 +107,13 @@ if __name__ == "__main__":
         "results/online/topics_20230101_to_20230430_bertopic_online.csv",
         "results/v1/topics_20230101_to_20230430_bertopic_v1.csv",
         "results/v2/topics_20230101_to_20230430_bertopic_v2.csv",
-        "bertopic_v1_topics_globo.csv",
-        "bertopic_v2_topics_globo.csv",
-        "bertopic_online_topics_globo.csv"
+        "results/ab/bertopic_v1_topics_globo.csv",
+        "results/ab/bertopic_v2_topics_globo.csv",
+        "results/ab/bertopic_online_topics_globo.csv"
     ]
 
     for filename in filenames:
-        df = pd.read_parquet(filename)
+        df = pd.read_csv(filename)
 
         results = []
         groups = list(df.groupby('timestamp'))
