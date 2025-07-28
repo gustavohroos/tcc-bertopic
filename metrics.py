@@ -107,9 +107,9 @@ if __name__ == "__main__":
         "results/online/topics_20230101_to_20230430_bertopic_online.csv",
         "results/v1/topics_20230101_to_20230430_bertopic_v1.csv",
         "results/v2/topics_20230101_to_20230430_bertopic_v2.csv",
-        "results/ab/bertopic_v1_topics_globo.csv",
-        "results/ab/bertopic_v2_topics_globo.csv",
-        "results/ab/bertopic_online_topics_globo.csv"
+        "results/ab/bertopic_v1_topics_globo_2025-07-19_2025-07-26.csv",
+        "results/ab/bertopic_v2_topics_globo_2025-07-19_2025-07-26.csv",
+        "results/ab/bertopic_v3_topics_globo_2025-07-19_2025-07-26.csv"
     ]
 
     for filename in filenames:
